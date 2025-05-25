@@ -24,6 +24,16 @@ st.markdown("Carica PDF finanziari o fornisci URL per estrarre e analizzare metr
 # Configurazione sidebar
 st.sidebar.header("🔧 Configurazione")
 
+# Debug mode toggle
+debug_mode = st.sidebar.checkbox(
+    "🐛 Modalità Debug",
+    value=False,
+    help="Mostra risposte complete dell'AI e informazioni dettagliate di debug"
+)
+
+if debug_mode:
+    st.sidebar.info("🐛 **Modalità Debug Attiva**\n\nVedrai informazioni dettagliate su:\n- Testo estratto dai PDF\n- Prompt inviati all'AI\n- Risposte complete dell'AI\n- Parsing JSON\n- Statistiche di elaborazione")
+
 # Configurazione API OpenRouter
 openrouter_api_key = st.sidebar.text_input(
     "Chiave API OpenRouter",
@@ -67,25 +77,16 @@ available_metrics = [
     "Patrimonio Netto",
     "Flusso di Cassa Operativo",
     "Free Cash Flow",
-    "Rapporto Debito/Patrimonio"
+    "Rapporto Debito/Patrimonio",
+    "PFN (Posizione Finanziaria Netta)"
 ]
 
 selected_metrics = st.sidebar.multiselect(
     "Scegli le metriche da estrarre:",
     available_metrics,
-    default=["Ricavi/Vendite", "EBITDA", "EBIT", "Utile Netto"],
+    default=["EBITDA", "EBIT", "PFN (Posizione Finanziaria Netta)"],
     help="Seleziona le metriche finanziarie che vuoi estrarre dai documenti"
 )
-
-# Debug mode toggle
-debug_mode = st.sidebar.checkbox(
-    "🐛 Modalità Debug",
-    value=False,
-    help="Mostra risposte complete dell'AI e informazioni dettagliate di debug"
-)
-
-if debug_mode:
-    st.sidebar.info("🐛 **Modalità Debug Attiva**\n\nVedrai informazioni dettagliate su:\n- Testo estratto dai PDF\n- Prompt inviati all'AI\n- Risposte complete dell'AI\n- Parsing JSON\n- Statistiche di elaborazione")
 
 # Funzione per estrarre testo da PDF
 def extract_pdf_text(pdf_file):
@@ -222,16 +223,25 @@ def extract_financial_data(pdf_text, company_info, metrics):
         "Ricavi/Vendite": {{"value": 123456789, "unit": "milioni"}},
         "EBITDA": {{"value": 23456789, "unit": "milioni"}},
         "EBIT": {{"value": 20000000, "unit": "milioni"}},
-        "Utile Netto": {{"value": 15000000, "unit": "milioni"}}
+        "PFN (Posizione Finanziaria Netta)": {{"value": 15000000, "unit": "milioni"}}
     }}
     
-    Regole:
+    Regole specifiche:
     - Converti tutti i valori nella stessa unità (preferibilmente milioni)
-    - Se una metrica non viene trovata, imposta il valore a null
+    - Se una metrica non viene trovata direttamente, CALCOLALA dai dati disponibili:
+      * EBITDA = EBIT + Ammortamenti (ammort. immateriali + ammort. materiali)
+      * EBIT = Risultato operativo (A-B nel conto economico italiano)
+      * PFN = Debiti verso banche - Disponibilità liquide - Titoli facilmente liquidabili
+      * Se PFN è negativo = posizione di liquidità netta (bene per l'azienda)
     - Per i rapporti, usa il formato decimale (es. 0.25 per 25%)
+    - Cerca in tutto il documento, non solo all'inizio
+    - Identifica voci come "Ricavi delle vendite", "TOTALE VALORE DELLA PRODUZIONE", "TOTALE COSTI DELLA PRODUZIONE"
+    - Per ammortamenti cerca "AMM.TO" o "ammortamenti"
+    - Per debiti bancari cerca "Debiti verso banche"
+    - Per liquidità cerca "Disponibilità liquide" o "Depositi bancari"
     
-    Testo del documento (primi 8000 caratteri):
-    {pdf_text[:8000]}
+    Testo del documento (primi 20000 caratteri):
+    {pdf_text[:20000]}
     """
     
     return call_openrouter_api(prompt)
